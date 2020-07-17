@@ -35,6 +35,8 @@ def decode(s):
         i += 1
 
         assert i + width <= len(s), 'Failed to decode: ' + s
+        if width == 0:
+            return 0, s[i + width:]
         return int(s[i:i + width], 2), s[i + width:]
 
     assert False, 'Failed to decode: ' + s
