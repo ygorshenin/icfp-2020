@@ -4,6 +4,8 @@ module Main where
 import Control.Monad
 import Data.Char
 import Data.List
+import System.Environment
+import System.IO
 import qualified Data.Map as Map
 
 -- Returns true if string represents a possibly negative number.
@@ -143,16 +145,10 @@ makeASTS line = (name, entity)
     where (name:"=":rhs) = words line
           [entity] = makeAST rhs
 
-parseContext :: IO Context
-parseContext = do
-  lines <- liftM lines $ getContents
+readContext :: String -> IO Context
+readContext path = do
+  lines <- liftM lines $ readFile path
   return . Map.fromList $ map makeASTS lines
-
-go :: IO Entity
-go = do
-  ctx <- parseContext
-  let galaxy = ctx Map.! "galaxy"
-  return . simplify ctx $ Ap (Ap galaxy Nil) (Ap (Ap Cons (Number 0)) (Number 0))
 
 data ParsedEntity = PENumber Integer
                   | PECons ParsedEntity ParsedEntity
@@ -186,15 +182,43 @@ coordToPixel coords x y | x == (maxWidth + 1) = '\n'
 draw :: [(Integer, Integer)] -> String
 draw coords = [coordToPixel coords x y | y <- [-maxHeight .. maxHeight], x <- [-maxWidth .. (maxWidth + 1)]]
 
+runGalaxy :: Context -> Entity -> Entity -> (Entity, Entity, [(Integer, Integer)])
+runGalaxy ctx state point = (flag', state', coords')
+    where galaxy = ctx Map.! "galaxy"
+
+          result = simplify ctx $ Ap (Ap galaxy Nil) (Ap (Ap Cons (Number 0)) (Number 0))
+          flag' = simplify ctx $ Ap Car result
+          state' = simplify ctx $ Ap Car (Ap Cdr result)
+          data' = simplify ctx $ Ap Cdr (Ap Cdr result)
+          coords' = extractCoords $ parseEntities ctx data'
+
+readCoords :: IO (Integer, Integer)
+readCoords = do
+  putStr "Input coords: "
+  hFlush stdout
+  coords <- liftM (map read . words) getLine
+  if length coords /= 2
+  then do
+    putStrLn "Expected two coords!"
+    readCoords
+  else return (coords !! 0, coords !! 1)
+
+go :: Context -> Entity -> Entity -> IO ()
+go ctx state points = do
+    let (flag', state', coords') = runGalaxy ctx state points
+    putStrLn $ "Flag: " ++ (show flag')
+    putStrLn $ "Coords: " ++ (show coords')
+    putStrLn $ draw coords'
+
+    (x, y) <- readCoords
+    go ctx state' (Ap (Ap Cons (Number x)) (Number y))
+
 main :: IO ()
 main = do
-  ctx <- parseContext
-  let galaxy = ctx Map.! "galaxy"
-      result = simplify ctx $ Ap (Ap galaxy Nil) (Ap (Ap Cons (Number 0)) (Number 0))
+  args <- getArgs
+  when (length args /= 1) $ fail "Expected path-to-galaxy.txt as an argument"
+  ctx <- readContext $ head args
 
-      newFlag = simplify ctx $ Ap Car result
-      newState = simplify ctx $ Ap Car (Ap Cdr result)
-      newData = simplify ctx $ Ap Cdr (Ap Cdr result)
-
-      coords = extractCoords $ parseEntities ctx newData
-  putStrLn $ draw coords
+  let state = Nil
+      points = (Ap (Ap Cons (Number 0)) (Number 0))
+  go ctx state points
