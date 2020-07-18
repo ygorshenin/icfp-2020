@@ -172,16 +172,23 @@ extractCoords (PECons x y) = (extractCoords x) ++ (extractCoords y)
 maxWidth = 10
 maxHeight = 10
 
-coordToPixel :: [(Integer, Integer)] -> Integer -> Integer -> Char
-coordToPixel coords x y | x == (maxWidth + 1) = '\n'
-                        | (x == (-maxWidth) || x == maxWidth) && (y == (-maxHeight) || y == maxHeight) = '+'
-                        | x == (-maxWidth) || x == maxWidth = '|'
-                        | y == (-maxHeight) || y == maxHeight = '-'
-                        | (x, y) `elem` coords = '#'
-                        | otherwise = ' '
+coordToPixel :: (Integer, Integer) -> [(Integer, Integer)] -> (Integer, Integer) -> Char
+coordToPixel (maxWidth, maxHeight) coords (x, y)
+    | x == (maxWidth + 1) = '\n'
+    | (x == (-maxWidth) || x == maxWidth) && (y == (-maxHeight) || y == maxHeight) = '+'
+    | x == (-maxWidth) || x == maxWidth = '|'
+    | y == (-maxHeight) || y == maxHeight = '-'
+    | (x, y) `elem` coords = '#'
+    | otherwise = ' '
 
 draw :: [(Integer, Integer)] -> String
-draw coords = [coordToPixel coords x y | y <- [-maxHeight .. maxHeight], x <- [-maxWidth .. (maxWidth + 1)]]
+draw coords = [coordToPixel (maxWidth, maxHeight) coords (x, y) |
+               y <- [-maxHeight .. maxHeight],
+               x <- [-maxWidth .. (maxWidth + 1)]]
+    where xs = map (abs . fst) coords
+          ys = map (abs . snd) coords
+          maxWidth = maximum xs + 2
+          maxHeight = maximum ys + 2
 
 runGalaxy :: Context -> Entity -> Entity -> (Entity, Entity, [(Integer, Integer)])
 runGalaxy ctx state point = (flag', state', coords')
