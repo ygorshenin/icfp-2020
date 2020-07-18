@@ -169,26 +169,32 @@ extractCoords PENil = []
 extractCoords (PECons (PENumber u) (PENumber v)) = [(u, v)]
 extractCoords (PECons x y) = (extractCoords x) ++ (extractCoords y)
 
-maxWidth = 10
-maxHeight = 10
+type Bounds = (Integer, Integer, Integer, Integer)
+type Coord = (Integer, Integer)
 
-coordToPixel :: (Integer, Integer) -> [(Integer, Integer)] -> (Integer, Integer) -> Char
-coordToPixel (maxWidth, maxHeight) coords (x, y)
+coordToPixel :: Bounds -> [Coord] -> Coord -> Char
+coordToPixel (minWidth, minHeight, maxWidth, maxHeight) coords (x, y)
     | x == (maxWidth + 1) = '\n'
-    | (x == (-maxWidth) || x == maxWidth) && (y == (-maxHeight) || y == maxHeight) = '+'
-    | x == (-maxWidth) || x == maxWidth = '|'
-    | y == (-maxHeight) || y == maxHeight = '-'
+    | (x == minWidth || x == maxWidth) && (y == minHeight || y == maxHeight) = '+'
+    | x == minWidth || x == maxWidth = '|'
+    | y == minHeight || y == maxHeight = '-'
     | (x, y) `elem` coords = '#'
     | otherwise = ' '
 
 draw :: [(Integer, Integer)] -> String
-draw coords = [coordToPixel (maxWidth, maxHeight) coords (x, y) |
-               y <- [-maxHeight .. maxHeight],
-               x <- [-maxWidth .. (maxWidth + 1)]]
-    where xs = map (abs . fst) coords
-          ys = map (abs . snd) coords
+draw coords = [coordToPixel bounds coords (x, y) |
+               y <- [minHeight .. maxHeight],
+               x <- [minWidth .. (maxWidth + 1)]]
+    where xs = map fst coords
+          ys = map snd coords
+
+          minWidth = minimum xs - 2
           maxWidth = maximum xs + 2
+
+          minHeight = minimum ys - 2
           maxHeight = maximum ys + 2
+
+          bounds = (minWidth, minHeight, maxWidth, maxHeight)
 
 runGalaxy :: Context -> Entity -> Entity -> (Entity, Entity, [(Integer, Integer)])
 runGalaxy ctx state point = (flag', state', coords')
