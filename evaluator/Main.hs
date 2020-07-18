@@ -185,8 +185,7 @@ draw coords = [coordToPixel coords x y | y <- [-maxHeight .. maxHeight], x <- [-
 runGalaxy :: Context -> Entity -> Entity -> (Entity, Entity, [(Integer, Integer)])
 runGalaxy ctx state point = (flag', state', coords')
     where galaxy = ctx Map.! "galaxy"
-
-          result = simplify ctx $ Ap (Ap galaxy Nil) (Ap (Ap Cons (Number 0)) (Number 0))
+          result = simplify ctx $ Ap (Ap galaxy Nil) point
           flag' = simplify ctx $ Ap Car result
           state' = simplify ctx $ Ap Car (Ap Cdr result)
           data' = simplify ctx $ Ap Cdr (Ap Cdr result)
@@ -209,7 +208,7 @@ go ctx state points = do
     putStrLn $ "Flag: " ++ (show flag')
     putStrLn $ "Coords: " ++ (show coords')
     putStrLn $ draw coords'
-
+    putStrLn $ "State: " ++ show state
     (x, y) <- readCoords
     go ctx state' (Ap (Ap Cons (Number x)) (Number y))
 
