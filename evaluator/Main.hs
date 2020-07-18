@@ -208,7 +208,8 @@ go ctx state points = do
     putStrLn $ "Flag: " ++ (show flag')
     putStrLn $ "Coords: " ++ (show coords')
     putStrLn $ draw coords'
-    putStrLn $ "State: " ++ show state
+    putStrLn $ "State: " ++ (show state)
+
     (x, y) <- readCoords
     go ctx state' (Ap (Ap Cons (Number x)) (Number y))
 
