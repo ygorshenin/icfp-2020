@@ -44,9 +44,10 @@ func ap(l, r *Ast) *Ast {
 	return f
 }
 
-func (ast *Ast) compile() []string {
+func (ast *Ast) compilePointed(argnum *int) []string {
 	if ast == nil {
-		return nil
+		*argnum += 1
+		return []string{"arg" + strconv.Itoa(*argnum-1)}
 	}
 	if ast.term != "" {
 		return []string{ast.term}
@@ -56,9 +57,25 @@ func (ast *Ast) compile() []string {
 	}
 	var ret []string
 	ret = append(ret, "ap")
-	ret = append(ret, ast.left.compile()...)
-	ret = append(ret, ast.right.compile()...)
+	ret = append(ret, ast.left.compilePointed(argnum)...)
+	ret = append(ret, ast.right.compilePointed(argnum)...)
 	return ret
+}
+
+func (ast *Ast) compilePointless() []string {
+	ret := ast.compilePointed(new(int))
+	for len(ret) > 0 {
+		if !strings.HasPrefix(ret[len(ret)-1], "arg") {
+			break
+		}
+		ret = ret[0 : len(ret)-1]
+	}
+	return ret
+}
+
+func (ast *Ast) compile() []string {
+	//	return ast.compilePointed(new(int))
+	return ast.compilePointless()
 }
 
 func (ast *Ast) String() string {
@@ -127,6 +144,9 @@ func readProgram(path string) (decls []Decl) {
 	scanner := bufio.NewScanner(galaxyFile)
 	for scanner.Scan() {
 		s := scanner.Text()
+		if s[0] == '#' {
+			continue
+		}
 		toks := tokenize(s)
 		if toks[1] != "=" {
 			panic("bad decl")

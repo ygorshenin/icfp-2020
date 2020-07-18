@@ -2,4 +2,6 @@
 :b = ap ap ap b x y z
 :k = ap ap t x y
 :s = ap ap ap s x y z
-galaxy = ap ap ap :b :c :k :s
+:curry = ap x
+:curry1 = ap ap x
+galaxy = ap ap ap ap ap :c :b :k :s :curry :curry1
