@@ -16,10 +16,49 @@ type Decl struct {
 }
 
 type Ast struct {
-	op    string
-	term  string
-	left  *Ast
-	right *Ast
+	op     string
+	term   string
+	left   *Ast
+	right  *Ast
+	parent *Ast
+}
+
+func (ast *Ast) setLeft(child *Ast) {
+	ast.left = child
+	if child != nil {
+		child.parent = ast
+	}
+}
+
+func (ast *Ast) setRight(child *Ast) {
+	ast.right = child
+	if child != nil {
+		child.parent = ast
+	}
+}
+
+func ap(l, r *Ast) *Ast {
+	f := &Ast{op: "ap"}
+	f.setLeft(l)
+	f.setRight(r)
+	return f
+}
+
+func (ast *Ast) compile() []string {
+	if ast == nil {
+		return nil
+	}
+	if ast.term != "" {
+		return []string{ast.term}
+	}
+	if ast.op != "ap" {
+		panic("")
+	}
+	var ret []string
+	ret = append(ret, "ap")
+	ret = append(ret, ast.left.compile()...)
+	ret = append(ret, ast.right.compile()...)
+	return ret
 }
 
 func (ast *Ast) String() string {
@@ -39,8 +78,10 @@ func toAst(toks []string) (ast *Ast, rest []string) {
 	ast = new(Ast)
 	if toks[0] == "ap" {
 		ast.op, toks = toks[0], toks[1:]
-		ast.left, toks = toAst(toks)
-		ast.right, toks = toAst(toks)
+		lc, toks := toAst(toks)
+		rc, toks := toAst(toks)
+		ast.setLeft(lc)
+		ast.setRight(rc)
 		rest = toks
 	} else {
 		ast.term = toks[0]
@@ -185,21 +226,175 @@ func experiment(prog []Decl) {
 		if len(rest) != 0 {
 			panic("bad ast")
 		}
-		ast.reduce()
+		_ = ast
+
+		//		ast.reduce()
 	}
+}
+
+func (ast *Ast) findNode(s string) *Ast {
+	if ast == nil {
+		return nil
+	}
+	if ast.term == s {
+		return ast
+	}
+	if n := ast.left.findNode(s); n != nil {
+		return n
+	}
+	if n := ast.right.findNode(s); n != nil {
+		return n
+	}
+	return nil
+}
+
+func evaluateC(prog []Decl) (resProg []Decl) {
+	for _, decl := range prog {
+		ast, rest := toAst(decl.rhs)
+		if len(rest) != 0 {
+			panic("bad ast")
+		}
+		for {
+			c := ast.findNode("c")
+			if c == nil {
+				break
+			}
+
+			log.Println("found")
+
+			x := c.parent.right
+			log.Println("x ok")
+			y := x.parent.parent.right
+			log.Println("y ok")
+			z := y.parent.parent.right
+			log.Println("z ok")
+			pz := z.parent
+			if x == nil || y == nil || z == nil {
+				panic("")
+			}
+			log.Println(x, y, z)
+			//			log.Println(x.term, y.term, z.term)
+
+			f := ap(x, z)
+			pz.setLeft(f)
+			pz.setRight(y)
+		}
+
+		resProg = append(resProg, Decl{lhs: decl.lhs, rhs: ast.compile()})
+	}
+	return
+}
+
+func evaluateB(prog []Decl) (resProg []Decl) {
+	for _, decl := range prog {
+		ast, rest := toAst(decl.rhs)
+		if len(rest) != 0 {
+			panic("bad ast")
+		}
+		for {
+			c := ast.findNode("b")
+			if c == nil {
+				break
+			}
+
+			log.Println("found")
+
+			x := c.parent.right
+			y := x.parent.parent.right
+			z := y.parent.parent.right
+			pz := z.parent
+			if x == nil || y == nil || z == nil {
+				panic("")
+			}
+
+			f := ap(y, z)
+			pz.setLeft(x)
+			pz.setRight(f)
+		}
+
+		resProg = append(resProg, Decl{lhs: decl.lhs, rhs: ast.compile()})
+	}
+	return
+}
+
+func evaluateK(prog []Decl) (resProg []Decl) {
+	for _, decl := range prog {
+		ast, rest := toAst(decl.rhs)
+		if len(rest) != 0 {
+			panic("bad ast")
+		}
+		for {
+			c := ast.findNode("t") // K is t
+			if c == nil {
+				break
+			}
+
+			log.Println("found")
+
+			x := c.parent.right
+			y := x.parent.parent.right
+			py := y.parent
+			if x == nil || y == nil {
+				panic("")
+			}
+
+			py.op, py.term, py.left, py.right = x.op, x.term, x.left, x.right
+		}
+
+		resProg = append(resProg, Decl{lhs: decl.lhs, rhs: ast.compile()})
+	}
+	return
+}
+
+func evaluateS(prog []Decl) (resProg []Decl) {
+	for _, decl := range prog {
+		ast, rest := toAst(decl.rhs)
+		if len(rest) != 0 {
+			panic("bad ast")
+		}
+		for {
+			c := ast.findNode("s")
+			if c == nil {
+				break
+			}
+
+			log.Println("found")
+
+			x := c.parent.right
+			y := x.parent.parent.right
+			z := y.parent.parent.right
+			pz := z.parent
+			if x == nil || y == nil || z == nil {
+				panic("")
+			}
+
+			l := ap(x, z)
+			r := ap(y, z)
+			pz.setLeft(l)
+			pz.setRight(r)
+		}
+
+		resProg = append(resProg, Decl{lhs: decl.lhs, rhs: ast.compile()})
+	}
+	return
 }
 
 func main() {
 	log.SetFlags(0)
 
-	prog := readProgram("./galaxy.txt")
+	//	prog := readProgram("./galaxy.txt")
 	//	prog := readProgram("./t.txt")
+	prog := readProgram("./small.txt")
 
 	checkUseless(prog)
 	prog = inlineConstants(prog)
 	prog = inlineIntegerNegations(prog)
+	prog = evaluateC(prog)
+	prog = evaluateB(prog)
+	prog = evaluateK(prog)
+	prog = evaluateS(prog)
 
-	experiment(prog)
+	//	experiment(prog)
 
 	writeProgram(prog, os.Stdout)
 }

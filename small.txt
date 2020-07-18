@@ -1,0 +1,5 @@
+:c = ap ap ap c x y z
+:b = ap ap ap b x y z
+:k = ap ap t x y
+:s = ap ap ap s x y z
+galaxy = ap ap ap :b :c :k :s
