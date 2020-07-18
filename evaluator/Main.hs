@@ -55,8 +55,9 @@ type Context = Map.Map String Entity
 simplifyStep :: Context -> Entity -> Entity
 simplifyStep ctx (Ap I x) = x
 simplifyStep ctx (Ap (Ap (Ap S x) y) z) = Ap xz yz
-              where xz = Ap x z
-                    yz = Ap y z
+              where z' = simplify ctx z
+                    xz = Ap x z'
+                    yz = Ap y z'
 simplifyStep ctx (Ap (Ap T x) _) = x
 simplifyStep ctx (Ap (Ap F _) y) = y
 simplifyStep ctx (Ap (Ap (Ap Cons x) y) f) = Ap (Ap f x) y
