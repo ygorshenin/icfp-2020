@@ -47,71 +47,80 @@ data Entity = Add
             | S
             | T
             | Ref String
-              deriving (Show, Eq)
+              deriving (Eq, Show)
 
-type Context = Map.Map String Entity
+type Library = Map.Map String Entity
+
+type Bounds = (Integer, Integer, Integer, Integer)
+type Point = (Integer, Integer)
+
+data RunResult = RunResult { flag :: Entity, state :: Entity, points :: [Point] }
+                 deriving (Eq, Show)
+
+entityFromPoint :: Point -> Entity
+entityFromPoint (x, y) = Ap (Ap Cons (Number x)) (Number y)
 
 -- Performs a single simplification step
-simplifyStep :: Context -> Entity -> Entity
-simplifyStep ctx (Ap I x) = x
-simplifyStep ctx (Ap (Ap (Ap S x) y) z) = Ap xz yz
-              where z' = simplify ctx z
+simplifyStep :: Library -> Entity -> Entity
+simplifyStep lib (Ap I x) = x
+simplifyStep lib (Ap (Ap (Ap S x) y) z) = Ap xz yz
+              where z' = simplify lib z
                     xz = Ap x z'
                     yz = Ap y z'
-simplifyStep ctx (Ap (Ap T x) _) = x
-simplifyStep ctx (Ap (Ap F _) y) = y
-simplifyStep ctx (Ap (Ap (Ap Cons x) y) f) = Ap (Ap f x) y
-simplifyStep ctx (Ap (Ap (Ap B x) y) z) = Ap x (Ap y z)
-simplifyStep ctx (Ap (Ap (Ap C x) y) z) = Ap (Ap x z) y
-simplifyStep ctx (Ap Nil _) = T
-simplifyStep ctx (Ap (Ap Add (Number x)) (Number y)) = Number (x + y)
-simplifyStep ctx (Ap (Ap Add x) y) = Ap (Ap Add x') y'
-    where x' = simplifyStep ctx x
-          y' = simplifyStep ctx y
-simplifyStep ctx (Ap (Ap Mul (Number x)) (Number y)) = Number (x * y)
-simplifyStep ctx (Ap (Ap Mul x) y) = Ap (Ap Mul x') y'
-    where x' = simplifyStep ctx x
-          y' = simplifyStep ctx y
-simplifyStep ctx (Ap Neg (Number x)) = Number (-x)
-simplifyStep ctx (Ap Neg x) = Ap Neg (simplifyStep ctx x)
-simplifyStep ctx (Ap (Ap Eq (Number x)) (Number y)) = if x == y then T else F
-simplifyStep ctx (Ap (Ap Eq x) y) = Ap (Ap Eq x') y'
-    where x' = simplifyStep ctx x
-          y' = simplifyStep ctx y
-simplifyStep ctx (Ap (Ap Lt (Number x)) (Number y)) = if x < y then T else F
-simplifyStep ctx (Ap (Ap Lt x) y) = Ap (Ap Lt x') y'
-    where x' = simplifyStep ctx x
-          y' = simplifyStep ctx y
-simplifyStep ctx (Ap IsNil x) = case (simplifyStep ctx x) of
+simplifyStep lib (Ap (Ap T x) _) = x
+simplifyStep lib (Ap (Ap F _) y) = y
+simplifyStep lib (Ap (Ap (Ap Cons x) y) f) = Ap (Ap f x) y
+simplifyStep lib (Ap (Ap (Ap B x) y) z) = Ap x (Ap y z)
+simplifyStep lib (Ap (Ap (Ap C x) y) z) = Ap (Ap x z) y
+simplifyStep lib (Ap Nil _) = T
+simplifyStep lib (Ap (Ap Add (Number x)) (Number y)) = Number (x + y)
+simplifyStep lib (Ap (Ap Add x) y) = Ap (Ap Add x') y'
+    where x' = simplifyStep lib x
+          y' = simplifyStep lib y
+simplifyStep lib (Ap (Ap Mul (Number x)) (Number y)) = Number (x * y)
+simplifyStep lib (Ap (Ap Mul x) y) = Ap (Ap Mul x') y'
+    where x' = simplifyStep lib x
+          y' = simplifyStep lib y
+simplifyStep lib (Ap Neg (Number x)) = Number (-x)
+simplifyStep lib (Ap Neg x) = Ap Neg (simplifyStep lib x)
+simplifyStep lib (Ap (Ap Eq (Number x)) (Number y)) = if x == y then T else F
+simplifyStep lib (Ap (Ap Eq x) y) = Ap (Ap Eq x') y'
+    where x' = simplifyStep lib x
+          y' = simplifyStep lib y
+simplifyStep lib (Ap (Ap Lt (Number x)) (Number y)) = if x < y then T else F
+simplifyStep lib (Ap (Ap Lt x) y) = Ap (Ap Lt x') y'
+    where x' = simplifyStep lib x
+          y' = simplifyStep lib y
+simplifyStep lib (Ap IsNil x) = case (simplifyStep lib x) of
                               Nil -> T
                               (Ap (Ap Cons _) _) -> F
                               y -> Ap IsNil y
-simplifyStep ctx (Ap Car x) = case (simplifyStep ctx x) of
+simplifyStep lib (Ap Car x) = case (simplifyStep lib x) of
                             (Ap (Ap Cons x) _) -> x
                             y -> Ap y T
-simplifyStep ctx (Ap Cdr x) = case (simplifyStep ctx x) of
+simplifyStep lib (Ap Cdr x) = case (simplifyStep lib x) of
                             (Ap (Ap Cons _) y) -> y
                             y -> Ap y F
-simplifyStep ctx (Ap (Ap Div (Number x)) (Number y)) = Number $ divTZ x y
-simplifyStep ctx (Ap (Ap Div x) y) = Ap (Ap Div x') y'
-    where x' = simplifyStep ctx x
-          y' = simplifyStep ctx y
-simplifyStep ctx (Ref name) = ctx Map.! name
-simplifyStep ctx (Ap (Ref name) x) = Ap f x
-    where f = ctx Map.! name
-simplifyStep ctx (Ap (Ap (Ref name) x) y) = Ap (Ap f x) y
-    where f = ctx Map.! name
-simplifyStep ctx (Ap (Ap (Ap (Ref name) x) y) z) = Ap (Ap (Ap f x) y) z
-    where f = ctx Map.! name
-simplifyStep ctx (Ap f x) = Ap f' x
-    where f' = simplifyStep ctx f
+simplifyStep lib (Ap (Ap Div (Number x)) (Number y)) = Number $ divTZ x y
+simplifyStep lib (Ap (Ap Div x) y) = Ap (Ap Div x') y'
+    where x' = simplifyStep lib x
+          y' = simplifyStep lib y
+simplifyStep lib (Ref name) = lib Map.! name
+simplifyStep lib (Ap (Ref name) x) = Ap f x
+    where f = lib Map.! name
+simplifyStep lib (Ap (Ap (Ref name) x) y) = Ap (Ap f x) y
+    where f = lib Map.! name
+simplifyStep lib (Ap (Ap (Ap (Ref name) x) y) z) = Ap (Ap (Ap f x) y) z
+    where f = lib Map.! name
+simplifyStep lib (Ap f x) = Ap f' x
+    where f' = simplifyStep lib f
 simplifyStep _ x = x
 
 -- Performs as many simplifications as possible
-simplify :: Context -> Entity -> Entity
-simplify ctx e | e == e' = e
-               | otherwise = simplify ctx e'
-    where e' = simplifyStep ctx e
+simplify :: Library -> Entity -> Entity
+simplify lib e | e == e' = e
+               | otherwise = simplify lib e'
+    where e' = simplifyStep lib e
 
 parseSimpleEnity :: String -> Entity
 parseSimpleEnity "add" = Add
@@ -146,8 +155,8 @@ makeASTS line = (name, entity)
     where (name:"=":rhs) = words line
           [entity] = makeAST rhs
 
-readContext :: String -> IO Context
-readContext path = do
+readLibrary :: String -> IO Library
+readLibrary path = do
   lines <- liftM lines $ readFile path
   return . Map.fromList $ map makeASTS lines
 
@@ -156,37 +165,34 @@ data ParsedEntity = PENumber Integer
                   | PENil
                     deriving (Show, Eq)
 
-parseEntities :: Context -> Entity -> ParsedEntity
-parseEntities ctx e = case e' of
+parseEntities :: Library -> Entity -> ParsedEntity
+parseEntities lib e = case e' of
                         Number n -> PENumber n
-                        (Ap (Ap Cons x) y) -> PECons (parseEntities ctx x) (parseEntities ctx y)
+                        (Ap (Ap Cons x) y) -> PECons (parseEntities lib x) (parseEntities lib y)
                         Nil -> PENil
                         e'' -> error $ "Unsupported entity: " ++ (show e'')
-    where e' = simplify ctx e
+    where e' = simplify lib e
 
-extractCoords :: ParsedEntity -> [(Integer, Integer)]
-extractCoords PENil = []
-extractCoords (PECons (PENumber u) (PENumber v)) = [(u, v)]
-extractCoords (PECons x y) = (extractCoords x) ++ (extractCoords y)
+extractPoints :: ParsedEntity -> [Point]
+extractPoints PENil = []
+extractPoints (PECons (PENumber u) (PENumber v)) = [(u, v)]
+extractPoints (PECons x y) = (extractPoints x) ++ (extractPoints y)
 
-type Bounds = (Integer, Integer, Integer, Integer)
-type Coord = (Integer, Integer)
-
-coordToPixel :: Bounds -> [Coord] -> Coord -> Char
-coordToPixel (minWidth, minHeight, maxWidth, maxHeight) coords (x, y)
+pointToPixel :: Bounds -> [Point] -> Point -> Char
+pointToPixel (minWidth, minHeight, maxWidth, maxHeight) points (x, y)
     | x == (maxWidth + 1) = '\n'
     | (x == minWidth || x == maxWidth) && (y == minHeight || y == maxHeight) = '+'
     | x == minWidth || x == maxWidth = '|'
     | y == minHeight || y == maxHeight = '-'
-    | (x, y) `elem` coords = '#'
+    | (x, y) `elem` points = '#'
     | otherwise = ' '
 
-draw :: [(Integer, Integer)] -> String
-draw coords = [coordToPixel bounds coords (x, y) |
+draw :: [Point] -> String
+draw points = [pointToPixel bounds points (x, y) |
                y <- [minHeight .. maxHeight],
                x <- [minWidth .. (maxWidth + 1)]]
-    where xs = map fst coords
-          ys = map snd coords
+    where xs = map fst points
+          ys = map snd points
 
           minWidth = minimum xs - 2
           maxWidth = maximum xs + 2
@@ -196,43 +202,51 @@ draw coords = [coordToPixel bounds coords (x, y) |
 
           bounds = (minWidth, minHeight, maxWidth, maxHeight)
 
-runGalaxy :: Context -> Entity -> Entity -> (Entity, Entity, [(Integer, Integer)])
-runGalaxy ctx state point = (flag', state', coords')
-    where galaxy = ctx Map.! "galaxy"
-          result = simplify ctx $ Ap (Ap galaxy state) point
-          flag' = simplify ctx $ Ap Car result
-          state' = simplify ctx $ Ap Car (Ap Cdr result)
-          data' = simplify ctx $ Ap Cdr (Ap Cdr result)
-          coords' = extractCoords $ parseEntities ctx data'
+suggestClicks :: Library -> RunResult -> [Point]
+suggestClicks lib result = [point |
+                            point <- points result,
+                            let result' = runGalaxy lib (state result) (entityFromPoint point),
+                            result' /= result]
 
-readCoords :: IO (Integer, Integer)
-readCoords = do
-  putStr "Input coords: "
+runGalaxy :: Library -> Entity -> Entity -> RunResult
+runGalaxy lib state point = RunResult flag' state' points'
+    where galaxy = lib Map.! "galaxy"
+          result = simplify lib $ Ap (Ap galaxy state) point
+          flag' = simplify lib $ Ap Car result
+          state' = simplify lib $ Ap Car (Ap Cdr result)
+          data' = simplify lib $ Ap Cdr (Ap Cdr result)
+          points' = extractPoints $ parseEntities lib data'
+
+readPoint :: IO Point
+readPoint = do
+  putStr "Input points: "
   hFlush stdout
-  coords <- liftM (map read . words) getLine
-  if length coords /= 2
+  points <- liftM (map read . words) getLine
+  if length points /= 2
   then do
-    putStrLn "Expected two coords!"
-    readCoords
-  else return (coords !! 0, coords !! 1)
+    putStrLn "Expected two points!"
+    readPoint
+  else return (points !! 0, points !! 1)
 
-go :: Context -> Entity -> Entity -> IO ()
-go ctx state points = do
-    let (flag', state', coords') = runGalaxy ctx state points
+go :: Library -> Entity -> Entity -> IO ()
+go lib state point = do
+    let result@(RunResult flag' state' points') = runGalaxy lib state point
+        suggest = head $ suggestClicks lib result
     putStrLn $ "Flag: " ++ (show flag')
-    putStrLn $ "Coords: " ++ (show coords')
-    putStrLn $ draw coords'
+    putStrLn $ "Points: " ++ (show points')
+    putStrLn $ draw points'
     putStrLn $ "State: " ++ (show state)
+    putStrLn $ "Suggested points: " ++ (show suggest)
 
-    (x, y) <- readCoords
-    go ctx state' (Ap (Ap Cons (Number x)) (Number y))
+    point <- readPoint
+    go lib state' $ entityFromPoint point
 
 main :: IO ()
 main = do
   args <- getArgs
   when (length args /= 1) $ fail "Expected path-to-galaxy.txt as an argument"
-  ctx <- readContext $ head args
+  lib <- readLibrary $ head args
 
   let state = Nil
-      points = (Ap (Ap Cons (Number 0)) (Number 0))
-  go ctx state points
+      point = entityFromPoint (0, 0)
+  go lib state point
