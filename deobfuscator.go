@@ -15,6 +15,59 @@ type Decl struct {
 	rhs []string
 }
 
+type Ast struct {
+	op    string
+	term  string
+	left  *Ast
+	right *Ast
+}
+
+func (ast *Ast) String() string {
+	if ast == nil {
+		return "DUMMY" // introduce argument positions if needed
+	}
+	if ast.term != "" {
+		return ast.term
+	}
+	return ast.op + " " + ast.left.String() + " " + ast.right.String()
+}
+
+func toAst(toks []string) (ast *Ast, rest []string) {
+	if len(toks) == 0 {
+		return nil, toks
+	}
+	ast = new(Ast)
+	if toks[0] == "ap" {
+		ast.op, toks = toks[0], toks[1:]
+		ast.left, toks = toAst(toks)
+		ast.right, toks = toAst(toks)
+		rest = toks
+	} else {
+		ast.term = toks[0]
+		rest = toks[1:]
+	}
+	return
+}
+
+func (ast *Ast) numNodes() int {
+	if ast == nil {
+		return 0
+	}
+	return 1 + ast.left.numNodes() + ast.right.numNodes()
+}
+
+func (ast *Ast) reduce() *Ast {
+	if ast.numNodes() < 5 {
+		return ast
+	}
+
+	if ast.left.numNodes() != 1 {
+		ast.left = ast.left.reduce()
+	}
+	log.Println("need to eval ", ast.left.term)
+	return ast
+}
+
 func tokenize(s string) []string {
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	scanner.Split(bufio.ScanWords)
@@ -80,7 +133,7 @@ func isInt(s string) bool {
 	return err == nil
 }
 
-func replaceConstants(prog []Decl) (resProg []Decl) {
+func inlineConstants(prog []Decl) (resProg []Decl) {
 	vals := make(map[string]string)
 
 	for _, decl := range prog {
@@ -108,7 +161,7 @@ func replaceConstants(prog []Decl) (resProg []Decl) {
 	return
 }
 
-func replaceIntegerNegations(prog []Decl) (resProg []Decl) {
+func inlineIntegerNegations(prog []Decl) (resProg []Decl) {
 	for _, decl := range prog {
 		var newRhs []string
 		for j := 0; j < len(decl.rhs); {
@@ -126,14 +179,27 @@ func replaceIntegerNegations(prog []Decl) (resProg []Decl) {
 	return
 }
 
+func experiment(prog []Decl) {
+	for _, decl := range prog {
+		ast, rest := toAst(decl.rhs)
+		if len(rest) != 0 {
+			panic("bad ast")
+		}
+		ast.reduce()
+	}
+}
+
 func main() {
 	log.SetFlags(0)
 
 	prog := readProgram("./galaxy.txt")
+	//	prog := readProgram("./t.txt")
 
 	checkUseless(prog)
-	prog = replaceConstants(prog)
-	prog = replaceIntegerNegations(prog)
+	prog = inlineConstants(prog)
+	prog = inlineIntegerNegations(prog)
+
+	experiment(prog)
 
 	writeProgram(prog, os.Stdout)
 }
