@@ -23,6 +23,7 @@ library
     , containers
     , gloss
     , process
+    , http-conduit >= 2.3
   default-language: Haskell2010
 
 executable evaluator-exe
