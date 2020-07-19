@@ -1,5 +1,8 @@
 module Lib where
 
+import Data.ByteString.UTF8 as BSU
+import Data.ByteString.Lazy.UTF8 as BSL
+import Network.HTTP.Simple
 import System.Exit
 import System.Process
 
@@ -12,8 +15,8 @@ runCurl args = do
         ExitSuccess      -> return stdout
         ExitFailure code -> fail $ "Can't run curl with args" ++ (show args) ++ "\nstderr:" ++ stderr ++ "\nexit code:" ++ (show code)
 
-send :: String -> IO String
-send s = do
+sendWithCurl :: String -> IO String
+sendWithCurl s = do
     runCurl [ "-X"
               , "POST"
              , "https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=" ++ apiKey
@@ -24,3 +27,12 @@ send s = do
              , "-d"
              , s
              ]
+
+send :: String -> IO String
+send s = do
+    let url = "https://icfpc2020-api.testkontur.ru/aliens/send?apiKey=" ++ apiKey
+    initReq <- parseRequest url
+    let req = setRequestBodyLBS (BSL.fromString s) $ setRequestMethod (BSU.fromString "POST") initReq
+    response <- httpLBS req
+    let respBody = getResponseBody response
+    return $ BSL.toString respBody
