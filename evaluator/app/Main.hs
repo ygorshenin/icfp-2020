@@ -5,12 +5,9 @@ import Data.Char
 import Data.Function
 import Data.List
 import Data.Tuple
-import Debug.Trace
 import Graphics.Gloss.Data.ViewPort
-import Graphics.Gloss.Interface.Environment
 import Modem
 import System.Environment
-import System.IO
 import System.IO.Unsafe
 import qualified Data.Map as Map
 import qualified Graphics.Gloss as Gloss
@@ -83,10 +80,10 @@ simplifyStep lib (Ap (Ap (Ap S x) y) z) = (True, Ap xz yz)
                     yz = simplify lib (Ap y z')
 simplifyStep lib (Ap (Ap T x) _) = (True, simplify lib x)
 simplifyStep lib (Ap (Ap F _) y) = (True, simplify lib y)
-simplifyStep lib (Ap (Ap (Ap Cons x) y) f) = (True, Ap (Ap f x) y)
-simplifyStep lib (Ap (Ap (Ap B x) y) z) = (True, Ap x (Ap y z))
-simplifyStep lib (Ap (Ap (Ap C x) y) z) = (True, Ap (Ap x z) y)
-simplifyStep lib (Ap Nil _) = (True, T)
+simplifyStep _ (Ap (Ap (Ap Cons x) y) f) = (True, Ap (Ap f x) y)
+simplifyStep _ (Ap (Ap (Ap B x) y) z) = (True, Ap x (Ap y z))
+simplifyStep _ (Ap (Ap (Ap C x) y) z) = (True, Ap (Ap x z) y)
+simplifyStep _ (Ap Nil _) = (True, T)
 simplifyStep lib (Ap (Ap Add x) y) = (True, Number $ x' + y')
     where Number x' = dirtyHack $ simplify lib x
           Number y' = dirtyHack $ simplify lib y
@@ -106,7 +103,7 @@ simplifyStep lib (Ap IsNil x) = case (simplify lib x) of
                               (Ap (Ap Cons _) _) -> (True, F)
                               y -> (True, simplify lib $ Ap IsNil y)
 simplifyStep lib (Ap Car x) = case (simplify lib x) of
-                            (Ap (Ap Cons x) _) -> (True, simplify lib x)
+                            (Ap (Ap Cons y) _) -> (True, simplify lib y)
                             y -> (True, simplify lib (Ap y T))
 simplifyStep lib (Ap Cdr x) = case (simplify lib x) of
                             (Ap (Ap Cons _) y) -> (True, simplify lib y)
@@ -165,8 +162,8 @@ makeASTS line = (name, entity)
 
 readLibrary :: String -> IO Library
 readLibrary path = do
-  lines <- liftM lines $ readFile path
-  return . Map.fromList $ map makeASTS lines
+  ls <- liftM lines $ readFile path
+  return . Map.fromList $ map makeASTS ls
 
 data ParsedEntity = PENumber Integer
                   | PECons ParsedEntity ParsedEntity
@@ -190,8 +187,9 @@ serializeEntities PENil = Nil
 
 extractPoints :: Int -> Int -> ParsedEntity -> [(Int, Point)]
 extractPoints _ _ PENil = []
-extractPoints itemIndex listIndex (PECons (PENumber u) (PENumber v)) = [(listIndex, (u, v))]
+extractPoints _ listIndex (PECons (PENumber x) (PENumber y)) = [(listIndex, (x, y))]
 extractPoints itemIndex listIndex (PECons x y) = (extractPoints 0 itemIndex x) ++ (extractPoints (itemIndex + 1) listIndex y)
+extractPoints _ _ e = error $ "Failed to extract points from: " ++ (show e)
 
 suggestClicks :: Library -> RunResult -> [Point]
 suggestClicks lib result = [point |
@@ -199,8 +197,8 @@ suggestClicks lib result = [point |
                             let result' = runGalaxy lib (state result) (entityFromPoint point),
                             result' /= result]
 
-send :: Library -> ParsedEntity -> IO ParsedEntity
-send lib entity = do
+send :: ParsedEntity -> IO ParsedEntity
+send entity = do
   let input = Modem.mod entity
   output <- Lib.sendWithCurl input
   putStrLn $ "Input: " ++ (show input)
@@ -210,20 +208,21 @@ send lib entity = do
   return result
 
 runGalaxy :: Library -> Entity -> Entity -> RunResult
-runGalaxy lib state point = unsafePerformIO $ do
+runGalaxy lib s point = unsafePerformIO $ do
     let galaxy = lib Map.! "galaxy"
-        result = simplify lib $ Ap (Ap galaxy state) point
+        result = simplify lib $ Ap (Ap galaxy s) point
         flag' = simplify lib $ Ap Car result
         state' = simplify lib $ Ap Car (Ap Cdr result)
         data' = simplify lib $ Ap Cdr (Ap Cdr result)
         entities' = parseEntities lib data'
         points' = extractPoints 0 0 $ entities'
+    putStrLn $ "Point: " ++ (show point)
+    putStrLn $ "Flag': " ++ (show flag')
     case flag' of
       Number 0 -> return $ RunResult flag' state' points'
       _ -> do
         putStrLn $ "State: " ++ (show state')
-        putStrLn $ "Flag: " ++ (show flag')
-        entities'' <- send lib entities'
+        entities'' <- send entities'
         putStrLn $ "Received: " ++ (show entities'')
         return $ runGalaxy lib state' (serializeEntities entities'')
 
@@ -232,11 +231,11 @@ instance Modem ParsedEntity where
   mod (PECons x y) = "11" ++ (Modem.mod x) ++ (Modem.mod y)
   mod PENil        = "00"
 
-  demod s = go u v
+  demod s = go u
             where (u, v) = splitAt 2 s
-                  go "00" v = (PENil, v)
-                  go "11" v = ((PECons a b), z)
-                  go _    v = (PENumber x, rest)
+                  go "00" = (PENil, v)
+                  go "11" = ((PECons a b), z)
+                  go _    = (PENumber x, rest)
                   (a, w) = demod v
                   (b, z) = demod w
                   (x, rest) = demod s :: (Integer, String)
@@ -250,15 +249,17 @@ square :: Float -> Gloss.Color -> Gloss.Picture
 square size color = Gloss.color color $ Gloss.polygon path
     where path = makeSquarePath size
 
+squareWidth :: Float
 squareWidth = 20
 
+windowSize :: (Int, Int)
 windowSize = (1280, 720)
 
 makeViewport :: [Point] -> IO ViewPort
-makeViewport points = do
+makeViewport ps = do
   let (resx, resy) = windowSize
-      xs = map fst points
-      ys = map snd points
+      xs = map fst ps
+      ys = map snd ps
 
       xmin = (fromIntegral $ minimum xs - 1) * squareWidth
       xmax = (fromIntegral $ maximum xs + 2) * squareWidth
@@ -317,20 +318,14 @@ inputHandler _ world = world
 updateFunc :: Float -> World -> World
 updateFunc = flip const
 
-skipIntro :: Library -> Entity -> [(Integer, Integer)] -> RunResult
-skipIntro lib state [p] = runGalaxy lib state (entityFromPoint p)
-skipIntro lib state (p:ps) = skipIntro lib state' ps
-    where (RunResult flag' state' points') = runGalaxy lib state (entityFromPoint p)
-
 main :: IO ()
 main = do
   args <- getArgs
   when (length args /= 1) $ fail "Expected path-to-galaxy.txt as an argument"
   lib <- readLibrary $ head args
 
-  let state = Nil
-      result = skipIntro lib state [(0, 0), (-1, -3), (-1, -3), (-1, -3), (-1, -3), (-3, -3), (0, -3), (0, 0), (8, 4), (2, -8), (3, 6), (0, -14), (-4, 10), (9, 8), (9, -3), (3, 10), (-4, 10), (13, 4)]
-
+  let s = Ap (Ap Cons (Number 2)) (Ap (Ap (Ap (Ap (Ap B C) (Ap (Ap B (Ap C (Ref ":1144"))) (Ap Add (Number (-1))))) (Number 1)) (Ap (Ap Cons (Number 1)) (Ap (Ap Cons (Ap Neg (Number 1))) Nil))) (Ap (Ap Cons (Ap (Ap Cons (Ref ":1421")) (Ap (Ap Cons (Ap Neg (Number 1))) Nil))) (Ap (Ap Cons (Number 0)) (Ap (Ap Cons Nil) Nil))))
+      result = runGalaxy lib s (entityFromPoint (1000, 1000))
       world = World lib result False
 
   Gloss.play (Gloss.InWindow "Galaxy" windowSize (30, 30)) Gloss.black 0 world drawingFunc inputHandler updateFunc
