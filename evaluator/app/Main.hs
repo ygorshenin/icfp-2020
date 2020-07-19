@@ -2,7 +2,9 @@ module Main where
 
 import Control.Monad
 import Data.Char
+import Data.Function
 import Data.List
+import Data.Tuple
 import Debug.Trace
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Environment
@@ -101,7 +103,7 @@ simplifyStep lib (Ap (Ap Lt x) y) = (True, if x' < y' then T else F)
           Number y' = dirtyHack $ simplify lib y
 simplifyStep lib (Ap IsNil x) = case (simplify lib x) of
                               Nil -> (True, T)
-                              (Ap (Ap Cons _) _) -> (True , F)
+                              (Ap (Ap Cons _) _) -> (True, F)
                               y -> (True, simplify lib $ Ap IsNil y)
 simplifyStep lib (Ap Car x) = case (simplify lib x) of
                             (Ap (Ap Cons x) _) -> (True, simplify lib x)
@@ -200,7 +202,9 @@ suggestClicks lib result = [point |
 send :: Library -> ParsedEntity -> IO ParsedEntity
 send lib entity = do
   let input = Modem.mod entity
-  output <- Lib.send input
+  output <- Lib.sendWithCurl input
+  putStrLn $ "Input: " ++ (show input)
+  putStrLn $ "Output: " ++ (show output)
   let (result, left) = demod output
   when (length left /= 0) . putStrLn $ "String left after parse: " ++ (show left)
   return result
@@ -217,6 +221,8 @@ runGalaxy lib state point = unsafePerformIO $ do
     case flag' of
       Number 0 -> return $ RunResult flag' state' points'
       _ -> do
+        putStrLn $ "State: " ++ (show state')
+        putStrLn $ "Flag: " ++ (show flag')
         entities'' <- send lib entities'
         putStrLn $ "Received: " ++ (show entities'')
         return $ runGalaxy lib state' (serializeEntities entities'')
@@ -268,11 +274,11 @@ both :: (a -> b) -> (a, a) -> (b, b)
 both f (x, y) = (f x, f y)
 
 drawingFunc :: World -> Gloss.Picture
-drawingFunc (World lib result suggestEnabled) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
+drawingFunc (World lib result suggestEnabled) = Gloss.scale 1 (-1) . applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
     where viewPort = unsafePerformIO . makeViewport . map snd $ points result
           suggest = take 1 $ suggestClicks lib result
 
-          innerPath = makeSquarePath (squareWidth - 2)
+          innerPath = makeSquarePath squareWidth
           outerPath = makeSquarePath squareWidth
 
           squareMain = Gloss.polygon innerPath
@@ -283,11 +289,11 @@ drawingFunc (World lib result suggestEnabled) = applyViewPortToPicture viewPort 
           maxDepth = fromIntegral $ maximum depths + 1
           depthWidth = maxDepth - minDepth
 
+          combinedPoints = map head . groupBy ((==) `on` snd) . sortBy (compare `on` swap) $ points result
           picturesMain = [Gloss.translate (squareWidth * x' + 1) (squareWidth * y' + 1) $ Gloss.color color squareMain
-                         | p <- points result
-                         , let (x', y') = both fromIntegral $ snd p
-                         , let d = fst p
-                         , let color = Gloss.greyN $ (maxDepth - fromIntegral d - minDepth) / depthWidth]
+                         | (d, p) <- combinedPoints
+                         , let (x', y') = both fromIntegral p
+                         , let color = Gloss.greyN $ (depthWidth - (fromIntegral d - minDepth)) / depthWidth]
           picturesSuggest = if suggestEnabled
                             then [Gloss.translate (squareWidth * x') (squareWidth * y') squareSuggest
                                  | p <- suggest
@@ -295,11 +301,11 @@ drawingFunc (World lib result suggestEnabled) = applyViewPortToPicture viewPort 
                             else []
 
 inputHandler :: Game.Event -> World -> World
-inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result suggestEnabled) =
+inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ (x, y)) (World lib result suggestEnabled) =
     World lib result' suggestEnabled
     where ps = map snd $ points result
           viewPort = unsafePerformIO $ makeViewport ps
-          (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort p
+          (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort (x, -y)
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
 inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result suggestEnabled) =
     World lib result (not suggestEnabled)
