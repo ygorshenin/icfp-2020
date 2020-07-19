@@ -67,6 +67,11 @@ data RunResult = RunResult { flag :: Entity, state :: Entity, points :: [(Int, P
 entityFromPoint :: Point -> Entity
 entityFromPoint (x, y) = Ap (Ap Cons (Number x)) (Number y)
 
+dirtyHack :: Entity -> Entity
+dirtyHack T = Number 1
+dirtyHack F = Number 0
+dirtyHack x = x
+
 -- Performs a single simplification step
 simplifyStep :: Library -> Entity -> (Bool, Entity)
 simplifyStep lib (Ap I x) = (True, simplify lib x)
@@ -81,19 +86,19 @@ simplifyStep lib (Ap (Ap (Ap B x) y) z) = (True, Ap x (Ap y z))
 simplifyStep lib (Ap (Ap (Ap C x) y) z) = (True, Ap (Ap x z) y)
 simplifyStep lib (Ap Nil _) = (True, T)
 simplifyStep lib (Ap (Ap Add x) y) = (True, Number $ x' + y')
-    where Number x' = simplify lib x
-          Number y' = simplify lib y
+    where Number x' = dirtyHack $ simplify lib x
+          Number y' = dirtyHack $ simplify lib y
 simplifyStep lib (Ap (Ap Mul x) y) = (True, Number $ x' * y')
-    where Number x' = simplify lib x
-          Number y' = simplify lib y
+    where Number x' = dirtyHack $ simplify lib x
+          Number y' = dirtyHack $ simplify lib y
 simplifyStep lib (Ap Neg x) = (True, Number (-x'))
-    where Number x' = simplify lib x
+    where Number x' = dirtyHack $ simplify lib x
 simplifyStep lib (Ap (Ap Eq x) y) = (True, if x' == y' then T else F)
-    where Number x' = simplify lib x
-          Number y' = simplify lib y
+    where Number x' = dirtyHack $ simplify lib x
+          Number y' = dirtyHack $ simplify lib y
 simplifyStep lib (Ap (Ap Lt x) y) = (True, if x' < y' then T else F)
-    where Number x' = simplify lib x
-          Number y' = simplify lib y
+    where Number x' = dirtyHack $ simplify lib x
+          Number y' = dirtyHack $ simplify lib y
 simplifyStep lib (Ap IsNil x) = case (simplify lib x) of
                               Nil -> (True, T)
                               (Ap (Ap Cons _) _) -> (True , F)
@@ -105,8 +110,8 @@ simplifyStep lib (Ap Cdr x) = case (simplify lib x) of
                             (Ap (Ap Cons _) y) -> (True, simplify lib y)
                             y -> (True, simplify lib (Ap y F))
 simplifyStep lib (Ap (Ap Div x) y) = (True, Number $ divTZ x' y')
-    where (Number x') = simplify lib x
-          (Number y') = simplify lib y
+    where (Number x') = dirtyHack $ simplify lib x
+          (Number y') = dirtyHack $ simplify lib y
 simplifyStep lib (Ref name) = (True, simplify lib $ lib Map.! name)
 simplifyStep lib (Ap (Ref name) x) = (True, simplify lib $ Ap f x)
     where f = lib Map.! name
