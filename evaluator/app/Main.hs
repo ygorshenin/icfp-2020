@@ -1,12 +1,11 @@
 module Main where
 
 import Control.Monad
-import Debug.Trace
 import Data.Char
 import Data.List
+import Debug.Trace
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Environment
-import qualified Lib
 import Modem
 import System.Environment
 import System.IO
@@ -14,6 +13,7 @@ import System.IO.Unsafe
 import qualified Data.Map as Map
 import qualified Graphics.Gloss as Gloss
 import qualified Graphics.Gloss.Interface.Pure.Game as Game
+import qualified Lib
 
 -- Returns true if string represents a possibly negative number.
 isInteger :: String -> Bool
@@ -235,7 +235,7 @@ instance Modem ParsedEntity where
                   (b, z) = demod w
                   (x, rest) = demod s :: (Integer, String)
 
-data World = World Library RunResult (Int, Int) Bool
+data World = World Library RunResult Bool
 
 makeSquarePath :: Float -> [(Float, Float)]
 makeSquarePath size = [(0, 0), (size, 0), (size, size), (0, size)]
@@ -246,26 +246,30 @@ square size color = Gloss.color color $ Gloss.polygon path
 
 squareWidth = 20
 
-makeViewport :: (Int, Int) -> [Point] -> ViewPort
-makeViewport (resx, resy) points = ViewPort (-(xmin + xmax) / 2, -(ymin + ymax) / 2) 0 scale
-    where xs = map fst points
-          ys = map snd points
+windowSize = (1280, 720)
 
-          xmin = (fromIntegral $ minimum xs - 1) * squareWidth
-          xmax = (fromIntegral $ maximum xs + 2) * squareWidth
+makeViewport :: [Point] -> IO ViewPort
+makeViewport points = do
+  let (resx, resy) = windowSize
+      xs = map fst points
+      ys = map snd points
 
-          ymin = (fromIntegral $ minimum ys - 1) * squareWidth
-          ymax = (fromIntegral $ maximum ys + 2) * squareWidth
+      xmin = (fromIntegral $ minimum xs - 1) * squareWidth
+      xmax = (fromIntegral $ maximum xs + 2) * squareWidth
 
-          scale = min ((fromIntegral resx) / (xmax - xmin)) ((fromIntegral resy) / (ymax - ymin))
+      ymin = (fromIntegral $ minimum ys - 1) * squareWidth
+      ymax = (fromIntegral $ maximum ys + 2) * squareWidth
+
+      scale = min ((fromIntegral resx) / (xmax - xmin)) ((fromIntegral resy) / (ymax - ymin))
+  return $ ViewPort (-(xmin + xmax) / 2, -(ymin + ymax) / 2) 0 scale
 
 
 both :: (a -> b) -> (a, a) -> (b, b)
 both f (x, y) = (f x, f y)
 
 drawingFunc :: World -> Gloss.Picture
-drawingFunc (World lib result resolution suggestEnabled) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
-    where viewPort = makeViewport resolution . map snd $ points result
+drawingFunc (World lib result suggestEnabled) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
+    where viewPort = unsafePerformIO . makeViewport . map snd $ points result
           suggest = take 1 $ suggestClicks lib result
 
           innerPath = makeSquarePath (squareWidth - 2)
@@ -289,16 +293,16 @@ drawingFunc (World lib result resolution suggestEnabled) = applyViewPortToPictur
                                  | p <- suggest
                                  , let (x', y') = both fromIntegral p]
                             else []
-          
+
 inputHandler :: Game.Event -> World -> World
-inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result resolution suggestEnabled) =
-    World lib result' resolution suggestEnabled
+inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result suggestEnabled) =
+    World lib result' suggestEnabled
     where ps = map snd $ points result
-          viewPort = makeViewport resolution ps
+          viewPort = unsafePerformIO $ makeViewport ps
           (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort p
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
-inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result resolution suggestEnabled) =
-    World lib result resolution (not suggestEnabled)
+inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result suggestEnabled) =
+    World lib result (not suggestEnabled)
 inputHandler _ world = world
 
 updateFunc :: Float -> World -> World
@@ -311,7 +315,6 @@ skipIntro lib state (p:ps) = skipIntro lib state' ps
 
 main :: IO ()
 main = do
-  resolution <- getScreenSize
   args <- getArgs
   when (length args /= 1) $ fail "Expected path-to-galaxy.txt as an argument"
   lib <- readLibrary $ head args
@@ -319,7 +322,6 @@ main = do
   let state = Nil
       result = skipIntro lib state [(0, 0), (-1, -3), (-1, -3), (-1, -3), (-1, -3), (-3, -3), (0, -3), (0, 0), (8, 4), (2, -8), (3, 6), (0, -14), (-4, 10), (9, 8), (9, -3), (3, 10), (-4, 10), (13, 4)]
 
-      world = World lib result resolution False
+      world = World lib result False
 
-  Gloss.play Gloss.FullScreen Gloss.black 0 world drawingFunc inputHandler updateFunc
---  Gloss.play (Gloss.InWindow "Galaxy" (1280, 720) (30, 30)) Gloss.black 0 world drawingFunc inputHandler updateFunc
+  Gloss.play (Gloss.InWindow "Galaxy" windowSize (30, 30)) Gloss.black 0 world drawingFunc inputHandler updateFunc
