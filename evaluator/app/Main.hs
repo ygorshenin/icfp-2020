@@ -67,66 +67,60 @@ entityFromPoint :: Point -> Entity
 entityFromPoint (x, y) = Ap (Ap Cons (Number x)) (Number y)
 
 -- Performs a single simplification step
-simplifyStep :: Library -> Entity -> Entity
-simplifyStep lib (Ap I x) = x
-simplifyStep lib (Ap (Ap (Ap S x) y) z) = Ap xz yz
+simplifyStep :: Library -> Entity -> (Bool, Entity)
+simplifyStep lib (Ap I x) = (True, simplify lib x)
+simplifyStep lib (Ap (Ap (Ap S x) y) z) = (True, Ap xz yz)
               where z' = simplify lib z
-                    xz = Ap x z'
-                    yz = Ap y z'
-simplifyStep lib (Ap (Ap T x) _) = x
-simplifyStep lib (Ap (Ap F _) y) = y
-simplifyStep lib (Ap (Ap (Ap Cons x) y) f) = Ap (Ap f x) y
-simplifyStep lib (Ap (Ap (Ap B x) y) z) = Ap x (Ap y z)
-simplifyStep lib (Ap (Ap (Ap C x) y) z) = Ap (Ap x z) y
-simplifyStep lib (Ap Nil _) = T
-simplifyStep lib (Ap (Ap Add (Number x)) (Number y)) = Number (x + y)
-simplifyStep lib (Ap (Ap Add x) y) = Ap (Ap Add x') y'
-    where x' = simplifyStep lib x
-          y' = simplifyStep lib y
-simplifyStep lib (Ap (Ap Mul (Number x)) (Number y)) = Number (x * y)
-simplifyStep lib (Ap (Ap Mul x) y) = Ap (Ap Mul x') y'
-    where x' = simplifyStep lib x
-          y' = simplifyStep lib y
-simplifyStep lib (Ap Neg (Number x)) = Number (-x)
-simplifyStep lib (Ap Neg x) = Ap Neg (simplifyStep lib x)
-simplifyStep lib (Ap (Ap Eq (Number x)) (Number y)) = if x == y then T else F
-simplifyStep lib (Ap (Ap Eq x) y) = Ap (Ap Eq x') y'
-    where x' = simplifyStep lib x
-          y' = simplifyStep lib y
-simplifyStep lib (Ap (Ap Lt (Number x)) (Number y)) = if x < y then T else F
-simplifyStep lib (Ap (Ap Lt x) y) = Ap (Ap Lt x') y'
-    where x' = simplifyStep lib x
-          y' = simplifyStep lib y
-simplifyStep lib (Ap IsNil x) = case (simplifyStep lib x) of
-                              Nil -> T
-                              (Ap (Ap Cons _) _) -> F
-                              y -> Ap IsNil y
-simplifyStep lib (Ap Car x) = case (simplifyStep lib x) of
-                            (Ap (Ap Cons x) _) -> x
-                            y -> Ap y T
-simplifyStep lib (Ap Cdr x) = case (simplifyStep lib x) of
-                            (Ap (Ap Cons _) y) -> y
-                            y -> Ap y F
-simplifyStep lib (Ap (Ap Div (Number x)) (Number y)) = Number $ divTZ x y
-simplifyStep lib (Ap (Ap Div x) y) = Ap (Ap Div x') y'
-    where x' = simplifyStep lib x
-          y' = simplifyStep lib y
-simplifyStep lib (Ref name) = lib Map.! name
-simplifyStep lib (Ap (Ref name) x) = Ap f x
+                    xz = simplify lib (Ap x z')
+                    yz = simplify lib (Ap y z')
+simplifyStep lib (Ap (Ap T x) _) = (True, simplify lib x)
+simplifyStep lib (Ap (Ap F _) y) = (True, simplify lib y)
+simplifyStep lib (Ap (Ap (Ap Cons x) y) f) = (True, Ap (Ap f x) y)
+simplifyStep lib (Ap (Ap (Ap B x) y) z) = (True, Ap x (Ap y z))
+simplifyStep lib (Ap (Ap (Ap C x) y) z) = (True, Ap (Ap x z) y)
+simplifyStep lib (Ap Nil _) = (True, T)
+simplifyStep lib (Ap (Ap Add x) y) = (True, Number $ x' + y')
+    where Number x' = simplify lib x
+          Number y' = simplify lib y
+simplifyStep lib (Ap (Ap Mul x) y) = (True, Number $ x' * y')
+    where Number x' = simplify lib x
+          Number y' = simplify lib y
+simplifyStep lib (Ap Neg x) = (True, Number (-x'))
+    where Number x' = simplify lib x
+simplifyStep lib (Ap (Ap Eq x) y) = (True, if x' == y' then T else F)
+    where Number x' = simplify lib x
+          Number y' = simplify lib y
+simplifyStep lib (Ap (Ap Lt x) y) = (True, if x' < y' then T else F)
+    where Number x' = simplify lib x
+          Number y' = simplify lib y
+simplifyStep lib (Ap IsNil x) = case (simplify lib x) of
+                              Nil -> (True, T)
+                              (Ap (Ap Cons _) _) -> (True , F)
+                              y -> (True, simplify lib $ Ap IsNil y)
+simplifyStep lib (Ap Car x) = case (simplify lib x) of
+                            (Ap (Ap Cons x) _) -> (True, simplify lib x)
+                            y -> (True, simplify lib (Ap y T))
+simplifyStep lib (Ap Cdr x) = case (simplify lib x) of
+                            (Ap (Ap Cons _) y) -> (True, simplify lib y)
+                            y -> (True, simplify lib (Ap y F))
+simplifyStep lib (Ap (Ap Div x) y) = (True, Number $ divTZ x' y')
+    where (Number x') = simplify lib x
+          (Number y') = simplify lib y
+simplifyStep lib (Ref name) = (True, simplify lib $ lib Map.! name)
+simplifyStep lib (Ap (Ref name) x) = (True, simplify lib $ Ap f x)
     where f = lib Map.! name
-simplifyStep lib (Ap (Ap (Ref name) x) y) = Ap (Ap f x) y
+simplifyStep lib (Ap (Ap (Ref name) x) y) = (True, simplify lib $ Ap (Ap f x) y)
     where f = lib Map.! name
-simplifyStep lib (Ap (Ap (Ap (Ref name) x) y) z) = Ap (Ap (Ap f x) y) z
+simplifyStep lib (Ap (Ap (Ap (Ref name) x) y) z) = (True, simplify lib $ Ap (Ap (Ap f x) y) z)
     where f = lib Map.! name
-simplifyStep lib (Ap f x) = Ap f' x
-    where f' = simplifyStep lib f
-simplifyStep _ x = x
+simplifyStep lib (Ap f x) = (a, Ap f' x)
+    where (a, f') = simplifyStep lib f
+simplifyStep _ x = (False, x)
 
 -- Performs as many simplifications as possible
 simplify :: Library -> Entity -> Entity
-simplify lib e | e == e' = e
-               | otherwise = simplify lib e'
-    where e' = simplifyStep lib e
+simplify lib e = if changed then simplify lib e' else e
+    where (changed, e') = simplifyStep lib e
 
 parseSimpleEnity :: String -> Entity
 parseSimpleEnity "add" = Add
@@ -277,7 +271,7 @@ both :: (a -> b) -> (a, a) -> (b, b)
 both f (x, y) = (f x, f y)
 
 drawingFunc :: World -> Gloss.Picture
-drawingFunc (World lib result resolution enableSuggest) = trace ("Depths: " ++ (show depths)) . applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
+drawingFunc (World lib result resolution enableSuggest) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
     where viewPort = makeViewport resolution . map snd $ points result
           suggest = take 1 $ suggestClicks lib result
 
