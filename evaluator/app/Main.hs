@@ -7,6 +7,7 @@ import Data.Char
 import Data.List
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Environment
+import Lib
 import Modem
 import System.Environment
 import System.IO
