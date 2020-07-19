@@ -22,5 +22,6 @@ executables:
     - -with-rtsopts=-N
     - -O2
     - -optc-O2
+    - -Wall
     dependencies:
     - evaluator
