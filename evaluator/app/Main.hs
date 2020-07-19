@@ -6,6 +6,7 @@ import Data.Char
 import Data.List
 import System.Environment
 import System.IO
+import Modem
 import qualified Data.Map as Map
 
 -- Returns true if string represents a possibly negative number.
@@ -24,7 +25,7 @@ isRef _ = False
 divTZ :: Integer -> Integer -> Integer
 divTZ x y | y == 0 = error "Division by zero"
           | y < 0 = divTZ (-x) (-y)
-          | x `mod` y == 0 || x > 0 = x `div` y
+          | x `Prelude.mod` y == 0 || x > 0 = x `div` y
           | otherwise = x `div` y + 1
 
 data Entity = Add
@@ -240,6 +241,20 @@ go lib state point = do
 
     point <- readPoint
     go lib state' $ entityFromPoint point
+
+instance Modem ParsedEntity where
+  mod (PENumber a) = Modem.mod a
+  mod (PECons x y) = "11" ++ (Modem.mod x) ++ (Modem.mod y)
+  mod PENil        = "00"
+
+  demod s = go u v
+            where (u, v) = splitAt 2 s
+                  go "00" v = (PENil, v)
+                  go "11" v = ((PECons a b), z)
+                  go _    v = (PENumber x, rest)
+                  (a, w) = demod v
+                  (b, z) = demod w
+                  (x, rest) = demod s :: (Integer, String)
 
 main :: IO ()
 main = do

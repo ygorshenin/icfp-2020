@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2c4bacf26dc927dbb3c49619af2b077fae385fbeac9bf76283165e21137d992b
+-- hash: c6a764178ade2ccadd5da2cf4db8b2127805b37ae0e3a76e6e0be50165c3f6aa
 
 name:           evaluator
 version:        0.0.0
@@ -13,6 +13,7 @@ build-type:     Simple
 library
   exposed-modules:
       Lib
+      Modem
   other-modules:
       Paths_evaluator
   hs-source-dirs:
