@@ -309,6 +309,9 @@ inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ (x, y))
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
 inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result suggestEnabled) =
     World lib result (not suggestEnabled)
+inputHandler (Game.EventKey (Game.Char 'd') Game.Up _ _) w@(World _ result _) = unsafePerformIO $ do
+    putStrLn $ "State: " ++ (show $ state result)
+    return w
 inputHandler _ world = world
 
 updateFunc :: Float -> World -> World
