@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 0e00a3a9141d6f3f039c5d7e0d966d163f221a244426cc6138ca1a3da421562e
+-- hash: 5d28a3c8ab3076a7b59fdbd4452812a4cf37559ca5392c6ade8708a420745258
 
 name:           evaluator
 version:        0.0.0
@@ -20,10 +20,12 @@ library
       lib
   build-depends:
       base >=4.7 && <5
+    , bytestring
     , containers
     , gloss
+    , http-conduit >=2.3
     , process
-    , http-conduit >= 2.3
+    , utf8-string >=1.0
   default-language: Haskell2010
 
 executable evaluator-exe
@@ -35,7 +37,11 @@ executable evaluator-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N -O2 -optc-O2
   build-depends:
       base >=4.7 && <5
+    , bytestring
     , containers
     , evaluator
     , gloss
+    , http-conduit >=2.3
+    , process
+    , utf8-string >=1.0
   default-language: Haskell2010
