@@ -8,7 +8,7 @@ class Modem a where
 
 toBinaryString :: Integer -> String
 toBinaryString x
-  | x < 0  = "error"
+  | x < 0  = error $ "Negative number is passed: " ++ (show x)
   | x == 0 = "0"
   | x > 0  = pad $ go x
              where go 0 = ""
@@ -29,9 +29,10 @@ instance Modem Integer where
             where modSign (-1) = "10"
                   modSign _    = "01"
                   modAbs x = (unary $ length s) ++ s
-                  s = toBinaryString x
+                  s = toBinaryString $ abs x
                   unary n
                       | n `Prelude.mod` 4 == 0 = (concat $ replicate (n `div` 4) "1") ++ "0"
+                      | otherwise = error $ "Bad " ++ (show s) ++ ", " ++ (show x)
 
     demod s = (demodPrefix, rest)
               where demodPrefix = (demodSign signPart) * (fromBinaryString absPart)
