@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -O2 -optc-O2 #-}
 module Main where
 
 import Control.Monad
@@ -7,10 +6,11 @@ import Data.Char
 import Data.List
 import Graphics.Gloss.Data.ViewPort
 import Graphics.Gloss.Interface.Environment
-import Lib
+import qualified Lib
 import Modem
 import System.Environment
 import System.IO
+import System.IO.Unsafe
 import qualified Data.Map as Map
 import qualified Graphics.Gloss as Gloss
 import qualified Graphics.Gloss.Interface.Pure.Game as Game
@@ -169,39 +169,22 @@ data ParsedEntity = PENumber Integer
 parseEntities :: Library -> Entity -> ParsedEntity
 parseEntities lib e = case e' of
                         Number n -> PENumber n
-                        (Ap (Ap Cons x) y) -> PECons (parseEntities lib x) (parseEntities lib y)
+                        (Ap (Ap Cons x) y) -> PECons (parseEntities lib x') (parseEntities lib y')
+                            where x' = simplify lib x
+                                  y' = simplify lib y
                         Nil -> PENil
                         e'' -> error $ "Unsupported entity: " ++ (show e'')
     where e' = simplify lib e
+
+serializeEntities :: ParsedEntity -> Entity
+serializeEntities (PENumber n) = Number n
+serializeEntities (PECons x y) = Ap (Ap Cons (serializeEntities x)) (serializeEntities y)
+serializeEntities PENil = Nil
 
 extractPoints :: Int -> Int -> ParsedEntity -> [(Int, Point)]
 extractPoints _ _ PENil = []
 extractPoints itemIndex listIndex (PECons (PENumber u) (PENumber v)) = [(listIndex, (u, v))]
 extractPoints itemIndex listIndex (PECons x y) = (extractPoints 0 itemIndex x) ++ (extractPoints (itemIndex + 1) listIndex y)
-
-pointToPixel :: Bounds -> [Point] -> Point -> Char
-pointToPixel (minWidth, minHeight, maxWidth, maxHeight) points (x, y)
-    | x == (maxWidth + 1) = '\n'
-    | (x == minWidth || x == maxWidth) && (y == minHeight || y == maxHeight) = '+'
-    | x == minWidth || x == maxWidth = '|'
-    | y == minHeight || y == maxHeight = '-'
-    | (x, y) `elem` points = '#'
-    | otherwise = ' '
-
-draw :: [Point] -> String
-draw points = [pointToPixel bounds points (x, y) |
-               y <- [minHeight .. maxHeight],
-               x <- [minWidth .. (maxWidth + 1)]]
-    where xs = map fst points
-          ys = map snd points
-
-          minWidth = minimum xs - 2
-          maxWidth = maximum xs + 2
-
-          minHeight = minimum ys - 2
-          maxHeight = maximum ys + 2
-
-          bounds = (minWidth, minHeight, maxWidth, maxHeight)
 
 suggestClicks :: Library -> RunResult -> [Point]
 suggestClicks lib result = [point |
@@ -209,25 +192,29 @@ suggestClicks lib result = [point |
                             let result' = runGalaxy lib (state result) (entityFromPoint point),
                             result' /= result]
 
-runGalaxy :: Library -> Entity -> Entity -> RunResult
-runGalaxy lib state point = RunResult flag' state' points'
-    where galaxy = lib Map.! "galaxy"
-          result = simplify lib $ Ap (Ap galaxy state) point
-          flag' = simplify lib $ Ap Car result
-          state' = simplify lib $ Ap Car (Ap Cdr result)
-          data' = simplify lib $ Ap Cdr (Ap Cdr result)
-          points' = extractPoints 0 0 $ parseEntities lib data'
+send :: Library -> ParsedEntity -> IO ParsedEntity
+send lib entity = do
+  let input = Modem.mod entity
+  output <- Lib.send input
+  let (result, left) = demod output
+  when (length left /= 0) . putStrLn $ "String left after parse: " ++ (show left)
+  return result
 
-readPoint :: IO Point
-readPoint = do
-  putStr "Input points: "
-  hFlush stdout
-  points <- liftM (map read . words) getLine
-  if length points /= 2
-  then do
-    putStrLn "Expected two points!"
-    readPoint
-  else return (points !! 0, points !! 1)
+runGalaxy :: Library -> Entity -> Entity -> RunResult
+runGalaxy lib state point = unsafePerformIO $ do
+    let galaxy = lib Map.! "galaxy"
+        result = simplify lib $ Ap (Ap galaxy state) point
+        flag' = simplify lib $ Ap Car result
+        state' = simplify lib $ Ap Car (Ap Cdr result)
+        data' = simplify lib $ Ap Cdr (Ap Cdr result)
+        entities' = parseEntities lib data'
+        points' = extractPoints 0 0 $ entities'
+    case flag' of
+      Number 0 -> return $ RunResult flag' state' points'
+      _ -> do
+        entities'' <- send lib entities'
+        putStrLn $ "Received: " ++ (show entities'')
+        return $ runGalaxy lib state' (serializeEntities entities'')
 
 instance Modem ParsedEntity where
   mod (PENumber a) = Modem.mod a
@@ -272,7 +259,7 @@ both :: (a -> b) -> (a, a) -> (b, b)
 both f (x, y) = (f x, f y)
 
 drawingFunc :: World -> Gloss.Picture
-drawingFunc (World lib result resolution enableSuggest) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
+drawingFunc (World lib result resolution suggestEnabled) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
     where viewPort = makeViewport resolution . map snd $ points result
           suggest = take 1 $ suggestClicks lib result
 
@@ -292,21 +279,21 @@ drawingFunc (World lib result resolution enableSuggest) = applyViewPortToPicture
                          , let (x', y') = both fromIntegral $ snd p
                          , let d = fst p
                          , let color = Gloss.greyN $ (maxDepth - fromIntegral d - minDepth) / depthWidth]
-          picturesSuggest = if enableSuggest
+          picturesSuggest = if suggestEnabled
                             then [Gloss.translate (squareWidth * x') (squareWidth * y') squareSuggest
                                  | p <- suggest
                                  , let (x', y') = both fromIntegral p]
                             else []
           
 inputHandler :: Game.Event -> World -> World
-inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result resolution enableSuggest) =
-    World lib result' resolution enableSuggest
+inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result resolution suggestEnabled) =
+    World lib result' resolution suggestEnabled
     where ps = map snd $ points result
           viewPort = makeViewport resolution ps
           (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort p
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
-inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result resolution enableSuggest) =
-    World lib result resolution (not enableSuggest)
+inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result resolution suggestEnabled) =
+    World lib result resolution (not suggestEnabled)
 inputHandler _ world = world
 
 updateFunc :: Float -> World -> World
@@ -327,7 +314,7 @@ main = do
   let state = Nil
       result = skipIntro lib state [(0, 0), (-1, -3), (-1, -3), (-1, -3), (-1, -3), (-3, -3), (0, -3), (0, 0), (8, 4), (2, -8), (3, 6), (0, -14), (-4, 10), (9, 8), (9, -3), (3, 10), (-4, 10), (13, 4)]
 
-      world = World lib result resolution True
+      world = World lib result resolution False
 
   Gloss.play Gloss.FullScreen Gloss.black 0 world drawingFunc inputHandler updateFunc
 --  Gloss.play (Gloss.InWindow "Galaxy" (1280, 720) (30, 30)) Gloss.black 0 world drawingFunc inputHandler updateFunc
