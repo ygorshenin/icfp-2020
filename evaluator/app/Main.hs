@@ -74,15 +74,15 @@ dirtyHack x = x
 -- Performs a single simplification step
 simplifyStep :: Library -> Entity -> (Bool, Entity)
 simplifyStep lib (Ap I x) = (True, simplify lib x)
-simplifyStep lib (Ap (Ap (Ap S x) y) z) = (True, Ap xz yz)
+simplifyStep lib (Ap (Ap (Ap S x) y) z) = (True, simplify lib $ Ap xz yz)
               where z' = simplify lib z
                     xz = simplify lib (Ap x z')
                     yz = simplify lib (Ap y z')
 simplifyStep lib (Ap (Ap T x) _) = (True, simplify lib x)
 simplifyStep lib (Ap (Ap F _) y) = (True, simplify lib y)
-simplifyStep _ (Ap (Ap (Ap Cons x) y) f) = (True, Ap (Ap f x) y)
-simplifyStep _ (Ap (Ap (Ap B x) y) z) = (True, Ap x (Ap y z))
-simplifyStep _ (Ap (Ap (Ap C x) y) z) = (True, Ap (Ap x z) y)
+simplifyStep lib (Ap (Ap (Ap Cons x) y) f) = (True, simplify lib $ Ap (Ap f x) y)
+simplifyStep lib (Ap (Ap (Ap B x) y) z) = (True, simplify lib $ Ap x (Ap y z))
+simplifyStep lib (Ap (Ap (Ap C x) y) z) = (True, simplify lib $ Ap (Ap x z) y)
 simplifyStep _ (Ap Nil _) = (True, T)
 simplifyStep lib (Ap (Ap Add x) y) = (True, Number $ x' + y')
     where Number x' = dirtyHack $ simplify lib x
@@ -118,7 +118,7 @@ simplifyStep lib (Ap (Ap (Ref name) x) y) = (True, simplify lib $ Ap (Ap f x) y)
     where f = lib Map.! name
 simplifyStep lib (Ap (Ap (Ap (Ref name) x) y) z) = (True, simplify lib $ Ap (Ap (Ap f x) y) z)
     where f = lib Map.! name
-simplifyStep lib (Ap f x) = (a, Ap f' x)
+simplifyStep lib (Ap f x) = (a, simplify lib $ Ap f' x)
     where (a, f') = simplifyStep lib f
 simplifyStep _ x = (False, x)
 
@@ -176,6 +176,8 @@ parseEntities lib e = case e' of
                         (Ap (Ap Cons x) y) -> PECons (parseEntities lib x') (parseEntities lib y')
                             where x' = simplify lib x
                                   y' = simplify lib y
+                        T -> PENumber 1
+                        F -> PENumber 0
                         Nil -> PENil
                         e'' -> error $ "Unsupported entity: " ++ (show e'')
     where e' = simplify lib e
@@ -261,11 +263,11 @@ makeViewport ps = do
       xs = map fst ps
       ys = map snd ps
 
-      xmin = (fromIntegral $ minimum xs - 1) * squareWidth
-      xmax = (fromIntegral $ maximum xs + 2) * squareWidth
+      xmin = (fromIntegral $ minimum xs - 4) * squareWidth
+      xmax = (fromIntegral $ maximum xs + 4) * squareWidth
 
-      ymin = (fromIntegral $ minimum ys - 1) * squareWidth
-      ymax = (fromIntegral $ maximum ys + 2) * squareWidth
+      ymin = (fromIntegral $ minimum ys - 4) * squareWidth
+      ymax = (fromIntegral $ maximum ys + 4) * squareWidth
 
       scale = min ((fromIntegral resx) / (xmax - xmin)) ((fromIntegral resy) / (ymax - ymin))
   return $ ViewPort (-(xmin + xmax) / 2, -(ymin + ymax) / 2) 0 scale
