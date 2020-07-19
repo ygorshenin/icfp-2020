@@ -311,6 +311,11 @@ inputHandler _ world = world
 updateFunc :: Float -> World -> World
 updateFunc = flip const
 
+skipIntro :: Library -> Entity -> [(Integer, Integer)] -> RunResult
+skipIntro lib state [p] = runGalaxy lib state (entityFromPoint p)
+skipIntro lib state (p:ps) = skipIntro lib state' ps
+    where (RunResult flag' state' points') = runGalaxy lib state (entityFromPoint p)
+
 main :: IO ()
 main = do
   resolution <- getScreenSize
@@ -319,9 +324,9 @@ main = do
   lib <- readLibrary $ head args
 
   let state = Nil
-      point = entityFromPoint (0, 0)
-      result = runGalaxy lib state point
+      result = skipIntro lib state [(0, 0), (-1, -3), (-1, -3), (-1, -3), (-1, -3), (-3, -3), (0, -3), (0, 0), (8, 4), (2, -8), (3, 6), (0, -14), (-4, 10), (9, 8), (9, -3), (3, 10), (-4, 10), (13, 4)]
 
       world = World lib result resolution True
 
   Gloss.play Gloss.FullScreen Gloss.black 0 world drawingFunc inputHandler updateFunc
+--  Gloss.play (Gloss.InWindow "Galaxy" (1280, 720) (30, 30)) Gloss.black 0 world drawingFunc inputHandler updateFunc
