@@ -4,9 +4,11 @@ module Main where
 import Control.Monad
 import Data.Char
 import Data.List
+import Graphics.Gloss.Data.ViewPort
+import Graphics.Gloss.Interface.Environment
+import Modem
 import System.Environment
 import System.IO
-import Modem
 import qualified Data.Map as Map
 import qualified Graphics.Gloss as Gloss
 import qualified Graphics.Gloss.Interface.Pure.Game as Game
@@ -258,29 +260,60 @@ instance Modem ParsedEntity where
                   (b, z) = demod w
                   (x, rest) = demod s :: (Integer, String)
 
-data World = World Library RunResult
+data World = World Library RunResult (Int, Int)
 
-squareWidth = 20
+makeSquarePath :: Float -> [(Float, Float)]
+makeSquarePath size = [(0, 0), (size, 0), (size, size), (0, size)]
 
 square :: Float -> Gloss.Color -> Gloss.Picture
 square size color = Gloss.color color $ Gloss.polygon path
-    where path = [(0, 0), (size, 0), (size, size), (0, size)]
+    where path = makeSquarePath size
+
+squareWidth = 20
+
+makeViewport :: (Int, Int) -> [Point] -> ViewPort
+makeViewport (resx, resy) points = ViewPort (-(xmin + xmax) / 2, -(ymin + ymax) / 2) 0 scale
+    where xs = map fst points
+          ys = map snd points
+
+          xmin = (fromIntegral $ minimum xs - 1) * squareWidth
+          xmax = (fromIntegral $ maximum xs + 2) * squareWidth
+
+          ymin = (fromIntegral $ minimum ys - 1) * squareWidth
+          ymax = (fromIntegral $ maximum ys + 2) * squareWidth
+
+          scale = min ((fromIntegral resx) / (xmax - xmin)) ((fromIntegral resy) / (ymax - ymin))
+
+
+both :: (a -> b) -> (a, a) -> (b, b)
+both f (x, y) = (f x, f y)
 
 drawingFunc :: World -> Gloss.Picture
-drawingFunc (World lib result) = Gloss.pictures pictures
+drawingFunc (World lib result resolution) = applyViewPortToPicture viewPort $ Gloss.pictures (picturesMain ++ picturesSuggest)
     where ps = points result
-          s = square (squareWidth - 2) Gloss.white
-          pictures = [Gloss.translate (squareWidth * x' + 1) (squareWidth * y' + 1) s
-                     | (x, y) <- points result
-                     , let x' = fromIntegral x
-                     , let y' = fromIntegral y]
+          viewPort = makeViewport resolution ps
+          suggest = take 1 $ suggestClicks lib result
+
+          innerPath = makeSquarePath (squareWidth - 2)
+          outerPath = makeSquarePath squareWidth
+
+          squareMain = Gloss.color Gloss.white $ Gloss.polygon innerPath
+          squareSuggest = Gloss.color Gloss.green $ Gloss.lineLoop outerPath
+
+          picturesMain = [Gloss.translate (squareWidth * x' + 1) (squareWidth * y' + 1) squareMain
+                         | p <- points result
+                         , let (x', y') = both fromIntegral p]
+          picturesSuggest = [Gloss.translate (squareWidth * x') (squareWidth * y') squareSuggest
+                            | p <- suggest
+                            , let (x', y') = both fromIntegral p]
           
 inputHandler :: Game.Event -> World -> World
-inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ (x, y)) (World lib result) = World lib result'
-    where x' = floor $ x / squareWidth
-          y' = floor $ y / squareWidth
+inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ p) (World lib result resolution) =
+    World lib result' resolution
+    where ps = points result
+          viewPort = makeViewport resolution ps
+          (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort p
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
-                                                                                         
 inputHandler _ world = world
 
 updateFunc :: Float -> World -> World
@@ -288,6 +321,7 @@ updateFunc = flip const
 
 main :: IO ()
 main = do
+  resolution <- getScreenSize
   args <- getArgs
   when (length args /= 1) $ fail "Expected path-to-galaxy.txt as an argument"
   lib <- readLibrary $ head args
@@ -296,6 +330,6 @@ main = do
       point = entityFromPoint (0, 0)
       result = runGalaxy lib state point
 
-      world = World lib result
+      world = World lib result resolution
 
   Gloss.play Gloss.FullScreen Gloss.black 0 world drawingFunc inputHandler updateFunc
