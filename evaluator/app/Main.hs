@@ -8,6 +8,8 @@ import System.Environment
 import System.IO
 import Modem
 import qualified Data.Map as Map
+import qualified Graphics.Gloss as Gloss
+import qualified Graphics.Gloss.Interface.Pure.Game as Game
 
 -- Returns true if string represents a possibly negative number.
 isInteger :: String -> Bool
@@ -256,6 +258,34 @@ instance Modem ParsedEntity where
                   (b, z) = demod w
                   (x, rest) = demod s :: (Integer, String)
 
+data World = World Library RunResult
+
+squareWidth = 20
+
+square :: Float -> Gloss.Color -> Gloss.Picture
+square size color = Gloss.color color $ Gloss.polygon path
+    where path = [(0, 0), (size, 0), (size, size), (0, size)]
+
+drawingFunc :: World -> Gloss.Picture
+drawingFunc (World lib result) = Gloss.pictures pictures
+    where ps = points result
+          s = square (squareWidth - 2) Gloss.white
+          pictures = [Gloss.translate (squareWidth * x' + 1) (squareWidth * y' + 1) s
+                     | (x, y) <- points result
+                     , let x' = fromIntegral x
+                     , let y' = fromIntegral y]
+          
+inputHandler :: Game.Event -> World -> World
+inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ (x, y)) (World lib result) = World lib result'
+    where x' = floor $ x / squareWidth
+          y' = floor $ y / squareWidth
+          result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
+                                                                                         
+inputHandler _ world = world
+
+updateFunc :: Float -> World -> World
+updateFunc = flip const
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -264,4 +294,8 @@ main = do
 
   let state = Nil
       point = entityFromPoint (0, 0)
-  go lib state point
+      result = runGalaxy lib state point
+
+      world = World lib result
+
+  Gloss.play Gloss.FullScreen Gloss.black 0 world drawingFunc inputHandler updateFunc
