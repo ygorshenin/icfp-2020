@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3d41ec72dbfb1feacec7a92bd2af861397d162ae25bf085369500f54f835daf9
+-- hash: 0e00a3a9141d6f3f039c5d7e0d966d163f221a244426cc6138ca1a3da421562e
 
 name:           evaluator
 version:        0.0.0
@@ -31,7 +31,7 @@ executable evaluator-exe
       Paths_evaluator
   hs-source-dirs:
       app
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -O2 -optc-O2
   build-depends:
       base >=4.7 && <5
     , containers
