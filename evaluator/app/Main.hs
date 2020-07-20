@@ -215,7 +215,7 @@ runGalaxy lib s point = unsafePerformIO $ do
         result = simplify lib $ Ap (Ap galaxy s) point
         flag' = simplify lib $ Ap Car result
         state' = simplify lib $ Ap Car (Ap Cdr result)
-        data' = simplify lib $ Ap Cdr (Ap Cdr result)
+        data' = simplify lib $ Ap Car (Ap Cdr (Ap Cdr result))
         entities' = parseEntities lib data'
         points' = extractPoints 0 0 $ entities'
     putStrLn $ "Point: " ++ (show point)
