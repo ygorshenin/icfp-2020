@@ -1,5 +1,6 @@
 module Main where
 
+import Control.Exception
 import Control.Monad
 import Data.Char
 import Data.Function
@@ -53,7 +54,7 @@ data Entity = Add
             | S
             | T
             | Ref String
-              deriving (Eq, Show)
+              deriving (Eq, Show, Read)
 
 type Library = Map.Map String Entity
 
@@ -304,11 +305,23 @@ inputHandler (Game.EventKey (Game.MouseButton Game.LeftButton) Game.Up _ (x, y))
           viewPort = unsafePerformIO $ makeViewport ps
           (x', y') = both (floor . (/ squareWidth)) $ invertViewPort viewPort (x, -y)
           result' = runGalaxy lib (state result) $ entityFromPoint (x', y')
-inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) (World lib result suggestEnabled) =
-    World lib result (not suggestEnabled)
-inputHandler (Game.EventKey (Game.Char 'd') Game.Up _ _) w@(World _ result _) = unsafePerformIO $ do
+inputHandler (Game.EventKey (Game.Char 's') Game.Up _ _) world@(World _ result _) =
+    unsafePerformIO $ do
+      writeFile "state.txt" (show $ state result)
+      putStrLn "Succeeded to dump state!"
+      return world
+inputHandler (Game.EventKey (Game.Char 'l') Game.Up _ _) world@(World lib _ suggestEnabled) =
+    unsafePerformIO $ do
+      r <- try (liftM read $ readFile "state.txt") :: IO (Either IOError Entity)
+      case r of
+        Left e -> do putStrLn $ "Failed to load state: " ++ (show e)
+                     return world
+        Right s -> do let result' = runGalaxy lib s (entityFromPoint (1000000, 1000000))
+                      putStrLn "Succeeded to load state!"
+                      return $ World lib result' suggestEnabled
+inputHandler (Game.EventKey (Game.Char 'd') Game.Up _ _) world@(World _ result _) = unsafePerformIO $ do
     putStrLn $ "State: " ++ (show $ state result)
-    return w
+    return world
 inputHandler _ world = world
 
 updateFunc :: Float -> World -> World
