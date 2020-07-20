@@ -203,8 +203,6 @@ send :: ParsedEntity -> IO ParsedEntity
 send entity = do
   let input = Modem.mod entity
   output <- Lib.sendWithCurl input
-  putStrLn $ "Input: " ++ (show input)
-  putStrLn $ "Output: " ++ (show output)
   let (result, left) = demod output
   when (length left /= 0) . putStrLn $ "String left after parse: " ++ (show left)
   return result
@@ -218,14 +216,10 @@ runGalaxy lib s point = unsafePerformIO $ do
         data' = simplify lib $ Ap Car (Ap Cdr (Ap Cdr result))
         entities' = parseEntities lib data'
         points' = extractPoints 0 0 $ entities'
-    putStrLn $ "Point: " ++ (show point)
-    putStrLn $ "Flag': " ++ (show flag')
     case flag' of
       Number 0 -> return $ RunResult flag' state' points'
       _ -> do
-        putStrLn $ "State: " ++ (show state')
         entities'' <- send entities'
-        putStrLn $ "Received: " ++ (show entities'')
         return $ runGalaxy lib state' (serializeEntities entities'')
 
 instance Modem ParsedEntity where
