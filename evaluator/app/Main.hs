@@ -102,7 +102,7 @@ simplifyStep lib (Ap (Ap Lt x) y) = (True, if x' < y' then T else F)
 simplifyStep lib (Ap IsNil x) = case (simplify lib x) of
                               Nil -> (True, T)
                               (Ap (Ap Cons _) _) -> (True, F)
-                              y -> (True, simplify lib $ Ap IsNil y)
+                              y -> error $ "Unexpected cons result: " ++ (show y)
 simplifyStep lib (Ap Car x) = case (simplify lib x) of
                             (Ap (Ap Cons y) _) -> (True, simplify lib y)
                             y -> (True, simplify lib (Ap y T))
@@ -119,8 +119,8 @@ simplifyStep lib (Ap (Ap (Ref name) x) y) = (True, simplify lib $ Ap (Ap f x) y)
     where f = lib Map.! name
 simplifyStep lib (Ap (Ap (Ap (Ref name) x) y) z) = (True, simplify lib $ Ap (Ap (Ap f x) y) z)
     where f = lib Map.! name
-simplifyStep lib (Ap f x) = (a, simplify lib $ Ap f' x)
-    where (a, f') = simplifyStep lib f
+simplifyStep lib (Ap f x) = if changed then (True, simplify lib $ Ap f' x) else (False, Ap f x)
+    where (changed, f') = simplifyStep lib f
 simplifyStep _ x = (False, x)
 
 -- Performs as many simplifications as possible
